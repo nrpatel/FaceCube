@@ -186,7 +186,7 @@ def facecube_usage():
     print 'This script allows you to capture whatever your Kinect is pointing at as a'
     print 'point cloud to be formed into a solid STL in MeshLab.  Specific objects can'
     print 'be thresholded, segmented out, and hole filled.'
-    print 'Usage:'
+    print 'Usage: python facecube.py filename'
     print ' '
     print 'Up/Down      Adjusts the depth of the threshold closer or deeper'
     print '             (can still be used while paused)'
@@ -194,8 +194,8 @@ def facecube_usage():
     print 'Mouse Click  Click on an object to choose it and hide everything else.'
     print '             Click elsewhere to clear the selection.'
     print 'H/G          After choosing an object, H increases hole filling, G decreases'
-    print 'S            Saves the currently chosen object as a PLY file'
-    print 'P            Saves the current capture as a PNG screenshot'
+    print 'S            Saves the currently chosen object as a filename.ply'
+    print 'P            Saves a screenshot as filename.png'
         
 if __name__ == '__main__':
     import pygame
