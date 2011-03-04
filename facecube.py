@@ -1,20 +1,46 @@
+""" FaceCube: Copy objects using a Kinect and RepRap
+
+Copyright (c) 2011, Nirav Patel <http://eclecti.cc>
+
+Permission to use, copy, modify, and/or distribute this software for any
+purpose with or without fee is hereby granted, provided that the above
+copyright notice and this permission notice appear in all copies.
+
+THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+
+This script allows you to capture whatever your Kinect is pointing at as a 
+point cloud to be formed into a solid STL in MeshLab.  Specific objects can
+be thresholded, segmented out, and hole filled.
+
+PlyWriter - Saves a numpy array of a point cloud as a PLY file
+FaceCube - Does the actual capture, thresholding, and segmentation
+'main' - Pygame loop that displays the capture and accepts key and mouse input
+"""
+
 #!/usr/bin/env python
 
+import sys
 import freenect
 import numpy
 import scipy
 import scipy.ndimage
 
 class PlyWriter(object):
+    """Writes out the point cloud in the PLY file format
+    http://en.wikipedia.org/wiki/PLY_%28file_format%29"""
+       
     def __init__(self,name):
         self.name =  name
         
-    def save(self,array,depth):
+    def save(self,array):
         points = []
         
-#        closest = numpy.amin(array + 2047 * (array == 0))
-#        closest_mm = 1000.0/(-0.00307 * closest + 3.33)
-#        farthest = int((1000.0/(closest_mm + depth) - 3.33)/-0.00307)
         farthest = numpy.amax(array)
         farthest_mm = 1000.0/(-0.00307 * farthest + 3.33)
 
@@ -51,8 +77,10 @@ class PlyWriter(object):
                     points.append((x,y,z))
                     
         return points
-                    
+        
     def outline_points(self,array,depth):
+        """Adds an outline going back to the farthest depth to give MeshLab an
+        easier point cloud to turn into a solid"""
         points = []
         
         mask = array != 0
@@ -78,6 +106,8 @@ class PlyWriter(object):
         return points
         
     def back_points(self,array,depth):
+        """Adds a plane of points at the maximum depth to make it easier for MeshLab
+        to mesh a solid"""
         array = depth * (array != 0)
         
         return self.mesh_points(array)
@@ -92,6 +122,7 @@ class PlyWriter(object):
         f.write('end_header\n')
         
     def write_points(self,f,points,farthest):
+        """writes out the points with z starting at 0"""
         for point in points:
             f.write('%f %f %f\n' % (point[0],point[1],farthest-point[2]))
         
@@ -105,9 +136,11 @@ class FaceCube(object):
         pass
     
     def update(self):
+        """grabs a new frame from the Kinect"""
         self.depth, timestamp = freenect.sync_get_depth()
         
     def generate_threshold(self, face_depth):
+        """thresholds out the closest face_depth cm of stuff"""
         # the image breaks down when you get too close, so cap it at around 60cm
         self.depth = self.depth + 2047 * (self.depth <= 544)
         closest = numpy.amin(self.depth)
@@ -116,6 +149,8 @@ class FaceCube(object):
         self.threshold = self.depth * (self.depth <= farthest)
     
     def select_segment(self,point):
+        """picks a segment at a specific point.  if there is no segment there,
+        it resets to just show everything within the thresholded image"""
         segments, num_segments = scipy.ndimage.measurements.label(self.threshold)
         selected = segments[point[1],point[0]]
         
@@ -126,6 +161,7 @@ class FaceCube(object):
             self.segmented = None
     
     def segment(self):
+        """does the actual segmenting"""
         if self.selected_segment != None:
             segments, num_segments = scipy.ndimage.measurements.label(self.threshold)
             selected = segments[self.selected_segment]
@@ -135,6 +171,8 @@ class FaceCube(object):
                 self.segmented = None
         
     def hole_fill(self,window):
+        """fills holes in the object with an adjustable window size
+        bigger windows fill bigger holes, but will start to alias the object"""
         if self.segmented != None:
             self.segmented = scipy.ndimage.morphology.grey_closing(self.segmented,size=(window,window))
             
@@ -144,10 +182,26 @@ class FaceCube(object):
         else:
             return self.threshold
         
+def facecube_usage():
+    print 'This script allows you to capture whatever your Kinect is pointing at as a'
+    print 'point cloud to be formed into a solid STL in MeshLab.  Specific objects can'
+    print 'be thresholded, segmented out, and hole filled.'
+    print 'Usage:'
+    print ' '
+    print 'Up/Down      Adjusts the depth of the threshold closer or deeper'
+    print '             (can still be used while paused)'
+    print 'Spacebar     Pauses or unpauses capture'
+    print 'Mouse Click  Click on an object to choose it and hide everything else.'
+    print '             Click elsewhere to clear the selection.'
+    print 'H/G          After choosing an object, H increases hole filling, G decreases'
+    print 'S            Saves the currently chosen object as a PLY file'
+    print 'P            Saves the current capture as a PNG screenshot'
+        
 if __name__ == '__main__':
     import pygame
     from pygame.locals import *
 
+    facecube_usage()
     size = (640, 480)
     pygame.init()
     display = pygame.display.set_mode(size, 0)
@@ -157,7 +211,9 @@ if __name__ == '__main__':
     capturing = True
     hole_filling = 0
     changing_depth = 0.0
-    filename = 'test'
+    filename = 'facecube_test'
+    if len(sys.argv) > 1:
+        filename = sys.argv[1]
     
     while going:
         events = pygame.event.get()
@@ -181,7 +237,7 @@ if __name__ == '__main__':
                 elif e.key == K_s:
                     print "Saving array as %s.ply..." % filename
                     writer = PlyWriter(filename + '.ply')
-                    writer.save(facecube.get_array(),face_depth*10)
+                    writer.save(facecube.get_array())
                     print "done"
                 elif e.key == K_p:
                     screenshot = pygame.surfarray.make_surface(facecube.get_array().transpose())
