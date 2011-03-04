@@ -11,15 +11,21 @@ class PlyWriter(object):
         
     def save(self,array,depth):
         points = []
+        
+#        closest = numpy.amin(array + 2047 * (array == 0))
+#        closest_mm = 1000.0/(-0.00307 * closest + 3.33)
+#        farthest = int((1000.0/(closest_mm + depth) - 3.33)/-0.00307)
+        farthest = numpy.amax(array)
+        farthest_mm = 1000.0/(-0.00307 * farthest + 3.33)
+
+        points.extend(self.outline_points(array,farthest))
+        points.extend(self.back_points(array,farthest))
         points.extend(self.mesh_points(array))
-        if depth:
-            points.extend(self.outline_points(array,depth))
-            points.extend(self.back_points(array,depth))
         
         f = open(self.name,'w')
         
         self.write_header(f,points)
-        self.write_points(f,points)
+        self.write_points(f,points,farthest_mm)
         
         f.close()
         
@@ -42,16 +48,37 @@ class PlyWriter(object):
                     # from http://openkinect.org/wiki/Imaging_Information
                     x = float(i - dims[0] / 2) * float(z + minDistance) * scaleFactor * ratio
                     y = float(j - dims[1] / 2) * float(z + minDistance) * scaleFactor
-                    points.append('%f %f %f\n' % (x,y,z))
+                    points.append((x,y,z))
                     
         return points
                     
     def outline_points(self,array,depth):
-
         points = []
+        
+        mask = array != 0
+        outline = array * (mask - scipy.ndimage.morphology.binary_erosion(mask))
+        
+        dims = array.shape
+        minDistance = -100
+        scaleFactor = 0.0021
+        ratio = float(dims[0])/float(dims[1])
+        
+        for i in range(0,dims[0]):
+            for j in range(0,dims[1]):
+                z = outline[i,j]
+                if z:
+                    z += 1
+                    while z < depth:
+                        z_mm = 1000.0/(-0.00307 * z + 3.33)
+                        x = float(i - dims[0] / 2) * float(z_mm + minDistance) * scaleFactor * ratio
+                        y = float(j - dims[1] / 2) * float(z_mm + minDistance) * scaleFactor
+                        points.append((x,y,z_mm))
+                        z += 1
+        
         return points
         
     def back_points(self,array,depth):
+        array = depth * (array != 0)
         
         return self.mesh_points(array)
         
@@ -64,8 +91,9 @@ class PlyWriter(object):
         f.write('property float z\n')
         f.write('end_header\n')
         
-    def write_points(self,f,points):
-        f.writelines(points)
+    def write_points(self,f,points,farthest):
+        for point in points:
+            f.write('%f %f %f\n' % (point[0],point[1],farthest-point[2]))
         
 
 class FaceCube(object):
@@ -85,7 +113,6 @@ class FaceCube(object):
         closest = numpy.amin(self.depth)
         closest_cm = 100.0/(-0.00307 * closest + 3.33)
         farthest = (100/(closest_cm + face_depth) - 3.33)/-0.00307
-        hist, bins = numpy.histogram(self.depth)
         self.threshold = self.depth * (self.depth <= farthest)
     
     def select_segment(self,point):
@@ -130,7 +157,7 @@ if __name__ == '__main__':
     capturing = True
     hole_filling = 0
     changing_depth = 0.0
-    filename = 'test.ply'
+    filename = 'test'
     
     while going:
         events = pygame.event.get()
@@ -152,9 +179,13 @@ if __name__ == '__main__':
                     hole_filling = max(0,hole_filling-1)
                     print "Hole filling window set to %d" % hole_filling
                 elif e.key == K_s:
-                    print "Saving array as %s" % filename
-                    writer = PlyWriter(filename)
-                    writer.save(facecube.get_array(),face_depth)
+                    print "Saving array as %s.ply..." % filename
+                    writer = PlyWriter(filename + '.ply')
+                    writer.save(facecube.get_array(),face_depth*10)
+                    print "done"
+                elif e.key == K_p:
+                    screenshot = pygame.surfarray.make_surface(facecube.get_array().transpose())
+                    pygame.image.save(screenshot,filename + '.png')
                     
             elif e.type == KEYUP:
                 if changing_depth != 0.0:
