@@ -1,0 +1,34 @@
+FaceCube: Copy objects using a Kinect and RepRap
+
+Copyright (c) 2011, Nirav Patel <http://eclecti.cc>
+
+Permission to use, copy, modify, and/or distribute this software for any
+purpose with or without fee is hereby granted, provided that the above
+copyright notice and this permission notice appear in all copies.
+
+THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+
+facecube.py allows you to capture whatever your Kinect is pointing at as a
+point cloud to be formed into a solid STL in MeshLab.  Specific objects can
+be thresholded, segmented out, and hole filled.
+Usage: python facecube.py filename
+ 
+Up/Down      Adjusts the depth of the threshold closer or deeper
+             (can still be used while paused)
+Spacebar     Pauses or unpauses capture
+Mouse Click  Click on an object to choose it and hide everything else.
+             Click elsewhere to clear the selection.
+H/G          After choosing an object, H increases hole filling, G decreases
+D            Toggles donut mode. Defaults to off.  Turn on if the object
+             should have holes going through it.
+S            Saves the currently chosen object as a filename.ply
+P            Saves a screenshot as filename.png
+
+meshing.mlx is a MeshLab filter script to turn the point cloud into a solid 
+STL.
