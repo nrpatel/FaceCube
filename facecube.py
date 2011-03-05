@@ -156,10 +156,10 @@ class FaceCube(object):
         """picks a segment at a specific point.  if there is no segment there,
         it resets to just show everything within the thresholded image"""
         segments, num_segments = scipy.ndimage.measurements.label(self.threshold)
-        selected = segments[point[1],point[0]]
+        selected = segments[point[0],point[1]]
         
         if selected:
-            self.selected_segment = (point[1],point[0])
+            self.selected_segment = (point[0],point[1])
         else:
             self.selected_segment = None
             self.segmented = None
