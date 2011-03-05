@@ -38,14 +38,14 @@ class PlyWriter(object):
     def __init__(self,name):
         self.name =  name
         
-    def save(self,array):
+    def save(self,array,leave_holes):
         points = []
         
         farthest = numpy.amax(array)
         farthest_mm = 1000.0/(-0.00307 * farthest + 3.33)
 
-        points.extend(self.outline_points(array,farthest))
-        points.extend(self.back_points(array,farthest))
+        points.extend(self.outline_points(array,farthest,leave_holes))
+        points.extend(self.back_points(array,farthest,leave_holes))
         points.extend(self.mesh_points(array))
         
         f = open(self.name,'w')
@@ -65,31 +65,31 @@ class PlyWriter(object):
         dims = array.shape
         minDistance = -100
         scaleFactor = 0.0021
-        ratio = float(dims[0])/float(dims[1])
         
         for i in range(0,dims[0]):
             for j in range(0,dims[1]):
                 z = array[i,j]
                 if z:
                     # from http://openkinect.org/wiki/Imaging_Information
-                    x = float(i - dims[0] / 2) * float(z + minDistance) * scaleFactor * ratio
+                    x = float(i - dims[0] / 2) * float(z + minDistance) * scaleFactor
                     y = float(j - dims[1] / 2) * float(z + minDistance) * scaleFactor
                     points.append((x,y,z))
                     
         return points
         
-    def outline_points(self,array,depth):
+    def outline_points(self,array,depth,leave_holes):
         """Adds an outline going back to the farthest depth to give MeshLab an
         easier point cloud to turn into a solid"""
         points = []
         
         mask = array != 0
+        if not leave_holes:
+            scipy.ndimage.morphology.binary_fill_holes(mask, output=mask)
         outline = array * (mask - scipy.ndimage.morphology.binary_erosion(mask))
         
         dims = array.shape
         minDistance = -100
         scaleFactor = 0.0021
-        ratio = float(dims[0])/float(dims[1])
         
         for i in range(0,dims[0]):
             for j in range(0,dims[1]):
@@ -98,17 +98,20 @@ class PlyWriter(object):
                     z += 1
                     while z < depth:
                         z_mm = 1000.0/(-0.00307 * z + 3.33)
-                        x = float(i - dims[0] / 2) * float(z_mm + minDistance) * scaleFactor * ratio
+                        x = float(i - dims[0] / 2) * float(z_mm + minDistance) * scaleFactor
                         y = float(j - dims[1] / 2) * float(z_mm + minDistance) * scaleFactor
                         points.append((x,y,z_mm))
                         z += 1
         
         return points
         
-    def back_points(self,array,depth):
+    def back_points(self,array,depth,leave_holes):
         """Adds a plane of points at the maximum depth to make it easier for MeshLab
         to mesh a solid"""
-        array = depth * (array != 0)
+        mask = array != 0
+        if not leave_holes:
+            scipy.ndimage.morphology.binary_fill_holes(mask, output=mask)
+        array = depth * mask
         
         return self.mesh_points(array)
         
@@ -137,12 +140,13 @@ class FaceCube(object):
     
     def update(self):
         """grabs a new frame from the Kinect"""
-        self.depth, timestamp = freenect.sync_get_depth()
+        depth_rotated, timestamp = freenect.sync_get_depth()
+        self.depth = depth_rotated.transpose()
         
     def generate_threshold(self, face_depth):
         """thresholds out the closest face_depth cm of stuff"""
-        # the image breaks down when you get too close, so cap it at around 60cm
-        self.depth = self.depth + 2047 * (self.depth <= 544)
+        # the image breaks down when you get too close, so cap it at around 50cm
+        self.depth = self.depth + 2047 * (self.depth <= 500)
         closest = numpy.amin(self.depth)
         closest_cm = 100.0/(-0.00307 * closest + 3.33)
         farthest = (100/(closest_cm + face_depth) - 3.33)/-0.00307
@@ -194,6 +198,8 @@ def facecube_usage():
     print 'Mouse Click  Click on an object to choose it and hide everything else.'
     print '             Click elsewhere to clear the selection.'
     print 'H/G          After choosing an object, H increases hole filling, G decreases'
+    print 'D            Toggles donut mode. Defaults to off.  Turn on if the object'
+    print '             should have holes going through it.'
     print 'S            Saves the currently chosen object as a filename.ply'
     print 'P            Saves a screenshot as filename.png'
         
@@ -209,6 +215,7 @@ if __name__ == '__main__':
     facecube = FaceCube()
     going = True
     capturing = True
+    donut = False
     hole_filling = 0
     changing_depth = 0.0
     filename = 'facecube_test'
@@ -234,13 +241,19 @@ if __name__ == '__main__':
                 elif e.key == K_g:
                     hole_filling = max(0,hole_filling-1)
                     print "Hole filling window set to %d" % hole_filling
+                elif e.key == K_d:
+                    donut = not donut
+                    donutstring = "off"
+                    if donut:
+                        donutstring = "on"
+                    print "Turning donut mode %s" % (donutstring)
                 elif e.key == K_s:
                     print "Saving array as %s.ply..." % filename
                     writer = PlyWriter(filename + '.ply')
-                    writer.save(facecube.get_array())
+                    writer.save(facecube.get_array(),donut)
                     print "done"
                 elif e.key == K_p:
-                    screenshot = pygame.surfarray.make_surface(facecube.get_array().transpose())
+                    screenshot = pygame.surfarray.make_surface(facecube.get_array())
                     pygame.image.save(screenshot,filename + '.png')
                     
             elif e.type == KEYUP:
@@ -262,5 +275,5 @@ if __name__ == '__main__':
             facecube.hole_fill(hole_filling)
         
         # this is not actually correct, but it sure does look cool!
-        display.blit(pygame.surfarray.make_surface(facecube.get_array().transpose()),(0,0))
+        display.blit(pygame.surfarray.make_surface(facecube.get_array()),(0,0))
         pygame.display.flip()
