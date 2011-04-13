@@ -37,12 +37,15 @@ class PlyWriter(object):
        
     def __init__(self,name):
         self.name =  name
+        # depth to calculate x and y from, to keep a uniform perspective
+        self.z_p = 0
         
     def save(self,array,leave_holes):
         points = []
         
         farthest = numpy.amax(array)
         farthest_mm = 1000.0/(-0.00307 * farthest + 3.33)
+        self.z_p = farthest_mm
 
         points.extend(self.outline_points(array,farthest,leave_holes))
         points.extend(self.back_points(array,farthest,leave_holes))
@@ -71,8 +74,8 @@ class PlyWriter(object):
                 z = array[i,j]
                 if z:
                     # from http://openkinect.org/wiki/Imaging_Information
-                    x = float(i - dims[0] / 2) * float(z + minDistance) * scaleFactor
-                    y = float(j - dims[1] / 2) * float(z + minDistance) * scaleFactor
+                    x = float(i - dims[0] / 2) * float(self.z_p + minDistance) * scaleFactor
+                    y = float(j - dims[1] / 2) * float(self.z_p + minDistance) * scaleFactor
                     points.append((x,y,z))
                     
         return points
@@ -98,8 +101,8 @@ class PlyWriter(object):
                     z += 1
                     while z < depth:
                         z_mm = 1000.0/(-0.00307 * z + 3.33)
-                        x = float(i - dims[0] / 2) * float(z_mm + minDistance) * scaleFactor
-                        y = float(j - dims[1] / 2) * float(z_mm + minDistance) * scaleFactor
+                        x = float(i - dims[0] / 2) * float(self.z_p + minDistance) * scaleFactor
+                        y = float(j - dims[1] / 2) * float(self.z_p + minDistance) * scaleFactor
                         points.append((x,y,z_mm))
                         z += 1
         
