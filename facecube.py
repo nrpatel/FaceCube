@@ -26,6 +26,7 @@ FaceCube - Does the actual capture, thresholding, and segmentation
 #!/usr/bin/env python
 
 import sys
+import subprocess
 import freenect
 import numpy
 import scipy
@@ -203,7 +204,8 @@ def facecube_usage():
     print 'H/G          After choosing an object, H increases hole filling, G decreases'
     print 'D            Toggles donut mode. Defaults to off.  Turn on if the object'
     print '             should have holes going through it.'
-    print 'S            Saves the currently chosen object as a filename.ply'
+    print 'S            Saves the object as a point cloud, filename.ply'
+    print 'O            Outputs the object as a solid, filename.stl'
     print 'P            Saves a screenshot as filename.png'
         
 if __name__ == '__main__':
@@ -254,6 +256,15 @@ if __name__ == '__main__':
                     print "Saving array as %s.ply..." % filename
                     writer = PlyWriter(filename + '.ply')
                     writer.save(facecube.get_array(),donut)
+                    print "done"
+                elif e.key == K_o:
+                    print "Saving temporary %s.ply..." % filename
+                    writer = PlyWriter(filename + '.ply')
+                    writer.save(facecube.get_array(),donut)
+                    print "Forming temporary solid %s.obj..." % filename
+                    subprocess.call(["meshlabserver","-i", filename+".ply","-o",filename+".obj","-s",sys.path[0]+"/meshing_poissonb.mlx"])
+                    print "Simplifying and saving %s.stl..." % filename
+                    subprocess.call(["meshlabserver","-i", filename+".obj","-o",filename+".stl","-s",sys.path[0]+"/meshing_simplifyb.mlx"])
                     print "done"
                 elif e.key == K_p:
                     screenshot = pygame.surfarray.make_surface(facecube.get_array())
