@@ -1,0 +1,13 @@
+<!DOCTYPE FilterScript>
+<FilterScript>
+ <filter name="Remove Duplicated Vertex"/>
+ <filter name="Compute normals for point sets">
+  <Param type="RichInt" value="50" name="K"/>
+ </filter>
+ <filter name="Poisson Reconstruction">
+  <Param type="RichInt" value="7" name="OctDepth"/>
+  <Param type="RichInt" value="6" name="SolverDivide"/>
+  <Param type="RichFloat" value="1" name="SamplesPerNode"/>
+  <Param type="RichFloat" value="1" name="Offset"/>
+ </filter>
+</FilterScript>
