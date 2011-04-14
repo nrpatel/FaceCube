@@ -9,6 +9,31 @@ import scipy.ndimage
 import pygame
 from pygame.locals import *
 import OSC
+import threading
+import Queue
+
+class GCodeGenerator(object):
+    def __init__(self):
+        self.q = Queue.Queue()
+        self.running = True
+        self.sender = threading.Thread(target=self.send_move)
+        self.feedrate = 4200
+        self.base_feedrate = 2100
+    
+    def connect(self):
+        self.sender.start()
+        
+    def add_move(self, start, end, extruding):
+        self.q.put((start,end,extruding))
+        
+    def send_move(self):
+        while self.running:
+            move = self.q.get()
+            print move
+            
+    def disconnect(self):
+        self.running = False
+        
 
 class HandClient(object):
     def __init__(self):
@@ -42,6 +67,7 @@ class HandClient(object):
     def update(self):
         self.server.handle_request()
 
+
 class GesturePrinter(object):
     IDLE = 0
     EXTRUDING = 1
@@ -53,6 +79,8 @@ class GesturePrinter(object):
         self.display = pygame.display.set_mode(self.size, 0)
         self.layer = pygame.surface.Surface(self.size)
         self.hand = HandClient()
+        self.generator = GCodeGenerator()
+        self.generator.connect()
         self.last_point = None
         self.point = None
         self.moving = False
@@ -130,9 +158,12 @@ class GesturePrinter(object):
         # We're only moving if there is a decent distance moved
         if self.last_point and self.point:
             dist =  math.sqrt((self.point[0]-self.last_point[0])**2+(self.point[1]-self.last_point[1])**2)
-            print dist
+#            print dist
             if dist > 0.003:
                 self.moving = True
+            
+        if self.moving:    
+            self.generator.add_move(self.last_point,self.point,self.state == self.EXTRUDING)
         
     def new_layer(self):
         # fade to black
