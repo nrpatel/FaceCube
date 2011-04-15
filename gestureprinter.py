@@ -2,7 +2,6 @@
 
 import sys
 import math
-import freenect
 import numpy
 import scipy
 import scipy.ndimage
@@ -173,7 +172,7 @@ class GesturePrinter(object):
             ld = self.camera_to_display(self.last_point)
         
             # pygame likes ints for drawing
-            pygame.draw.line(self.layer,(255,255,63),(ld[0],ld[1]),(d[0],d[1]),3)
+            pygame.draw.line(self.layer,(255,255,63),(ld[0],ld[1]),(d[0],d[1]),5)
             
         self.display.blit(self.layer,(0,0))
             
