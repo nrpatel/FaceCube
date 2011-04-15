@@ -11,28 +11,82 @@ from pygame.locals import *
 import OSC
 import threading
 import Queue
+import RepRapArduinoSerialSender
 
 class GCodeGenerator(object):
     def __init__(self):
         self.q = Queue.Queue()
         self.running = True
-        self.sender = threading.Thread(target=self.send_move)
+        self.sendqueue = threading.Thread(target=self.send_move)
+        self.sender = RepRapArduinoSerialSender.RepRapArduinoSerialSender("/dev/ttyUSB0", 115200, True)
+        self.sender.reset()
         self.feedrate = 4200
         self.base_feedrate = 2100
+        self.z_feedrate = 128
+        self.layer_height = 0.35
+        self.z = self.layer_height
+        self.center = (90.0, 100.0)
+        self.layer = 1 # start at 1 for since starting height is 0.35
+        self.filament_diameter = 1.75
+        self.extruded_width = self.layer_height*1.5
+        self.extrusion_area = self.extruded_width*self.layer_height*0.9
+        self.filament_area = math.pi*((self.filament_diameter/2)**2)
+        self.e_per_mm = self.extrusion_area/self.filament_area
+        self.e = 0.0
     
     def connect(self):
-        self.sender.start()
+        self.sendqueue.start()
+        self.start_sequence()
+    
+    def start_sequence(self):
+        self.q.put('G1 Z-100 F%.1f' % self.z_feedrate)
+        self.q.put('G92 Z0')
+        self.q.put('G92 E0') # reset E distance
+        self.q.put('G90')    # use absolute movement
+        self.q.put('M140 S70.0')  # set the bed to 70C
+        self.q.put('M104 S210.0') # set the extruder to 210C
+        self.q.put('G1 X0.0 Y0.0 Z0.0 F%.1f' % self.base_feedrate)
+        self.q.put('M109') # wait for the temperature to reach what it should
+        self.q.put('G1 Z%.2f F%.1f' % (self.z, self.z_feedrate))
+        self.q.put('G1 X%.2f Y%.2f F%.1f' % (self.center[0], self.center[1], self.feedrate))
         
     def add_move(self, start, end, extruding):
-        self.q.put((start,end,extruding))
+        f = self.feedrate
+        if self.layer == 1:
+            f = self.base_feedrate
+        move = 'G1 X%.2f Y%.2f Z%.2f F%.1f' % (end[0], end[1], self.z, f)
+        if extruding:
+            distance = math.sqrt((end[0]-start[0])**2+(end[1]-start[1])**2)
+            self.e += self.e_per_mm * distance
+            move = move + ' E%.4f' % self.e
+        self.q.put(move)
+        
+    def new_layer(self, point):
+        if self.layer == 1:
+            self.q.put('M104 S190') # extruder to 190C after first layer
+        self.layer += 1
+        self.z += self.layer_height
+        move = 'G1 X%.2f Y%.2f Z%.2f F%.1f' % (point[0], point[1], self.z, self.z_feedrate)
+        self.q.put(move)
+        self.q.put('G92 E0') # reset E to 0 for new layer
+        self.e = 0.0
         
     def send_move(self):
-        while self.running:
+        while self.running or not self.q.empty():
             move = self.q.get()
             print move
+            self.sender.write(move)
+            # TODO: retract when the queue runs dry
+            self.q.task_done()
             
     def disconnect(self):
+        self.q.put('G1 X0.0 Y0.0 F%.1f' % self.base_feedrate)
+        self.q.put('M104 S0')
+        self.q.put('M140 S0')
+        self.q.put('M84')
         self.running = False
+        print 'Disconnecting. %d moves left' % self.q.qsize()
+        self.q.join()
         
 
 class HandClient(object):
@@ -76,6 +130,8 @@ class GesturePrinter(object):
     def __init__(self):
         pygame.init()
         self.size = (640, 480)
+        self.printsize = (64, 48)
+        self.printcenter = (90, 100)
         self.display = pygame.display.set_mode(self.size, 0)
         self.layer = pygame.surface.Surface(self.size)
         self.hand = HandClient()
@@ -89,8 +145,8 @@ class GesturePrinter(object):
         self.extrude_color = (255,127,127)
         self.move_color = (127,255,127)
         self.raise_color = (127,127,255)
-        self.extrude_threshold = 13
-        self.raise_threshold = 27
+        self.extrude_threshold = 12
+        self.raise_threshold = 30
         self.start_threshold = 20
 
     def camera_to_display(self, point):
@@ -101,6 +157,14 @@ class GesturePrinter(object):
         y = (point[1]-self.center[1])*self.size[1]+self.size[1]/2
         z = max(4,self.start_threshold-(self.center[2]-self.point[2])*100)
         return (int(x),int(y),int(z))
+
+    def camera_to_printer(self, point):
+        if point == None or self.center == None:
+            return None
+            
+        x = (point[0]-self.center[0])*self.printsize[0]+self.printcenter[0]
+        y = (point[1]-self.center[1])*self.printsize[1]+self.printcenter[1]
+        return (x,y)
 
     def draw(self):
         d = self.camera_to_display(self.point)
@@ -161,11 +225,16 @@ class GesturePrinter(object):
 #            print dist
             if dist > 0.003:
                 self.moving = True
-            
+            else:
+                self.moving = False
+           
+    def send(self): 
         if self.moving:    
-            self.generator.add_move(self.last_point,self.point,self.state == self.EXTRUDING)
+            self.generator.add_move(self.camera_to_printer(self.last_point),
+              self.camera_to_printer(self.point),self.state == self.EXTRUDING)
         
     def new_layer(self):
+        self.generator.new_layer(self.camera_to_printer(self.last_point))
         # fade to black
         self.layer.fill((180,180,180),special_flags=BLEND_MULT)
 
@@ -176,10 +245,13 @@ class GesturePrinter(object):
             events = pygame.event.get()
             for e in events:
                 if e.type == QUIT or (e.type == KEYDOWN and e.key == K_ESCAPE):
+                    self.generator.disconnect()
                     going = False
             
             self.update()
+            self.send()
             self.draw()
+
             
 if __name__ == '__main__':
     gesture = GesturePrinter()
