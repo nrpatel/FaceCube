@@ -22,7 +22,7 @@ class GCodeGenerator(object):
         self.feedrate = 4200
         self.base_feedrate = 2100
         self.z_feedrate = 128
-        self.layer_height = 0.5
+        self.layer_height = 0.35
         self.z = self.layer_height
         self.center = (90.0, 100.0)
         self.layer = 1 # start at 1 for since starting height is 0.35
@@ -32,6 +32,7 @@ class GCodeGenerator(object):
         self.filament_area = math.pi*((self.filament_diameter/2)**2)
         self.e_per_mm = self.extrusion_area/self.filament_area
         self.e = 0.0
+        self.current_layer = []
     
     def connect(self):
         self.sendqueue.start()
@@ -63,16 +64,30 @@ class GCodeGenerator(object):
             self.e += self.e_per_mm * distance
             move = move + ' E%.4f' % self.e
         self.q.put(move)
+        self.current_layer.append((end[0],end[1],self.e))
+    
+    def reset_layer(self):
+        self.layer += 1
+        self.z += self.layer_height
+        move = 'G1 Z%.2f F%.1f' % (self.z, self.z_feedrate)
+        self.q.put(move)
+        self.q.put('G92 E0') # reset E to 0 for new layer
+        self.e = 0.0
+        
+    def duplicate_layer(self):
+        self.reset_layer()
+        for m in self.current_layer:
+            move = 'G1 X%.2f Y%.2f Z%.2f F%.1f E%.4f' % (m[0], m[1], self.z, self.feedrate,m[2])
+            self.q.put(move)
         
     def new_layer(self, point):
         if self.layer == 1:
             self.q.put('M104 S190') # extruder to 190C after first layer
-        self.layer += 1
-        self.z += self.layer_height
-        move = 'G1 X%.2f Y%.2f Z%.2f F%.1f' % (point[0], point[1], self.z, self.z_feedrate)
-        self.q.put(move)
-        self.q.put('G92 E0') # reset E to 0 for new layer
-        self.e = 0.0
+        self.duplicate_layer()
+        self.duplicate_layer()
+        self.current_layer = []
+        self.reset_layer()
+        
         
     def send_move(self):
         while self.running or not self.q.empty():
@@ -136,7 +151,7 @@ class GesturePrinter(object):
         self.printsize = (80, 60)
         self.printcenter = (90, 100)
         # rough approximation of the width of a printed line
-        self.brushsize = int(0.5*(self.size[0]/self.printsize[0]))
+        self.brushsize = int(0.65*(self.size[0]/self.printsize[0]))
         self.display = pygame.display.set_mode(self.size, 0)
         self.layer = pygame.surface.Surface(self.size)
         self.hand = HandClient()
