@@ -22,12 +22,12 @@ class GCodeGenerator(object):
         self.feedrate = 4200
         self.base_feedrate = 2100
         self.z_feedrate = 128
-        self.layer_height = 0.35
+        self.layer_height = 0.5
         self.z = self.layer_height
         self.center = (90.0, 100.0)
         self.layer = 1 # start at 1 for since starting height is 0.35
         self.filament_diameter = 1.75
-        self.extruded_width = self.layer_height*1.5
+        self.extruded_width = 0.35*1.5
         self.extrusion_area = self.extruded_width*self.layer_height*0.9
         self.filament_area = math.pi*((self.filament_diameter/2)**2)
         self.e_per_mm = self.extrusion_area/self.filament_area
@@ -38,6 +38,10 @@ class GCodeGenerator(object):
         self.start_sequence()
     
     def start_sequence(self):
+        self.q.put('G1 X-200 F%.1f' % self.base_feedrate)
+        self.q.put('G92 X0')        
+        self.q.put('G1 Y-200 F%.1f' % self.base_feedrate)
+        self.q.put('G92 Y0')
         self.q.put('G1 Z-100 F%.1f' % self.z_feedrate)
         self.q.put('G92 Z0')
         self.q.put('G92 E0') # reset E distance
@@ -128,9 +132,11 @@ class GesturePrinter(object):
 
     def __init__(self):
         pygame.init()
-        self.size = (640, 480)
-        self.printsize = (64, 48)
+        self.size = (800, 600)
+        self.printsize = (80, 60)
         self.printcenter = (90, 100)
+        # rough approximation of the width of a printed line
+        self.brushsize = int(0.5*(self.size[0]/self.printsize[0]))
         self.display = pygame.display.set_mode(self.size, 0)
         self.layer = pygame.surface.Surface(self.size)
         self.hand = HandClient()
@@ -172,7 +178,7 @@ class GesturePrinter(object):
             ld = self.camera_to_display(self.last_point)
         
             # pygame likes ints for drawing
-            pygame.draw.line(self.layer,(255,255,63),(ld[0],ld[1]),(d[0],d[1]),5)
+            pygame.draw.line(self.layer,(255,255,63),(ld[0],ld[1]),(d[0],d[1]),self.brushsize)
             
         self.display.blit(self.layer,(0,0))
             
