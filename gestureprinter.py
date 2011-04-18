@@ -2,9 +2,6 @@
 
 import sys
 import math
-import numpy
-import scipy
-import scipy.ndimage
 import pygame
 from pygame.locals import *
 import OSC
