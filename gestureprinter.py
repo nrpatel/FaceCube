@@ -18,13 +18,13 @@ class GCodeGenerator(object):
         self.sender.reset()
         self.feedrate = 4200
         self.base_feedrate = 2100
-        self.z_feedrate = 128
+        self.z_feedrate = 60
         self.layer_height = 0.35
         self.z = self.layer_height
         self.center = (90.0, 100.0)
         self.layer = 1 # start at 1 for since starting height is 0.35
-        self.filament_diameter = 1.75
-        self.extruded_width = 0.35*1.5
+        self.filament_diameter = 2.88
+        self.extruded_width = 0.58
         self.extrusion_area = self.extruded_width*self.layer_height*0.9
         self.filament_area = math.pi*((self.filament_diameter/2)**2)
         self.e_per_mm = self.extrusion_area/self.filament_area
@@ -44,8 +44,8 @@ class GCodeGenerator(object):
         self.q.put('G92 Z0')
         self.q.put('G92 E0') # reset E distance
         self.q.put('G90')    # use absolute movement
-        self.q.put('M140 S70.0')  # set the bed to 70C
-        self.q.put('M104 S210.0') # set the extruder to 210C
+        self.q.put('M140 S75.0')  # set the bed to 70C
+        self.q.put('M104 S215.0') # set the extruder to 210C
         self.q.put('G1 X0.0 Y0.0 Z0.0 F%.1f' % self.base_feedrate)
         self.q.put('M109') # wait for the temperature to reach what it should
         self.q.put('G1 Z%.2f F%.1f' % (self.z, self.z_feedrate))
@@ -78,8 +78,8 @@ class GCodeGenerator(object):
             self.q.put(move)
         
     def new_layer(self, point):
-        if self.layer == 1:
-            self.q.put('M104 S190') # extruder to 190C after first layer
+#        if self.layer == 1:
+#            self.q.put('M104 S190') # extruder to 190C after first layer
         self.duplicate_layer()
         self.duplicate_layer()
         self.current_layer = []
@@ -136,6 +136,28 @@ class HandClient(object):
     def update(self):
         self.server.handle_request()
 
+class MouseClient(object):
+    def __init__(self):
+        pygame.mouse.set_visible(False)
+        display = pygame.display.get_surface()
+        self.size = display.get_size()
+        self.size = (float(self.size[0]),float(self.size[1]))
+        pygame.mouse.set_pos(self.size[0]/2.0,self.size[1]/2.0)
+        print self.size
+        
+    def pos(self):
+        pos = pygame.mouse.get_pos()
+        buttons = pygame.mouse.get_pressed()
+        z = 1.0
+        if buttons[0]:
+            z = 0.5 # left click emulates a closer hand
+        if buttons[1] or buttons[2]:
+            z = 2.0 # middle or right click raises the layer
+        
+        return (float(pos[0])/self.size[0], float(pos[1])/self.size[1], z)
+        
+    def update(self):
+        pass
 
 class GesturePrinter(object):
     IDLE = 0

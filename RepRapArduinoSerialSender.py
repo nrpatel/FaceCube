@@ -76,6 +76,7 @@ class RepRapArduinoSerialSender:
 		# There is presumably some latency required.
 		time.sleep(1)
 		self.ser.setDTR(1)
+		time.sleep(3)
 		self.read("Start")
 
 	def write(self, block):

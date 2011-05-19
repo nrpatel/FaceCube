@@ -2,7 +2,7 @@
 <FilterScript>
  <filter name="Remove Duplicated Vertex"/>
  <filter name="Compute normals for point sets">
-  <Param type="RichInt" value="50" name="K"/>
+  <Param type="RichInt" value="20" name="K"/>
   <Param type="RichBool" value="false" name="flipFlag"/>
   <Param x="0" y="0" z="0" type="RichPoint3f" name="viewPos"/>
  </filter>
