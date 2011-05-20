@@ -62,6 +62,7 @@ class PlyWriter(object):
         min_point = self.to_world(min_point)
         max_point = self.to_world(max_point)
         center_mm = ((min_point[0]+max_point[0])/2.0,(min_point[1]+max_point[1])/2)
+        size_mm = (max_point[0]-min_point[0],max_point[1]-min_point[1])
 
         points.extend(self.outline_points(array,farthest,leave_holes))
         points.extend(self.back_points(array,farthest,leave_holes))
@@ -70,9 +71,11 @@ class PlyWriter(object):
         f = open(self.name,'w')
         
         self.write_header(f,points)
-        self.write_points(f,points,farthest_mm, center_mm)
+        self.write_points(f,points,farthest_mm,center_mm)
         
         f.close()
+        
+        return size_mm
         
     # inspired by, but not based on http://borglabs.com/blog/create-point-clouds-from-kinect
     def mesh_points(self,array):
@@ -213,6 +216,20 @@ def facecube_usage():
     print 'O            Outputs the object as a solid, filename.stl'
     print 'P            Saves a screenshot as filename.png'
         
+def save_ply(facecube, filename, donut):
+    print "Saving array as %s.ply..." % filename
+    writer = PlyWriter(filename + '.ply')
+    size = writer.save(facecube.get_array(),donut)
+    print "done. size " + repr(size)
+    return size
+    
+def save_stl(filename):
+    print "Forming temporary solid %s.obj..." % filename
+    subprocess.call(["meshlabserver","-i", filename+".ply","-o",filename+".obj","-s",sys.path[0]+"/meshing_poissonb.mlx"])
+    print "Simplifying and saving %s.stl..." % filename
+    subprocess.call(["meshlabserver","-i", filename+".obj","-o",filename+".stl","-s",sys.path[0]+"/meshing_simplifyb.mlx"])
+    print "done"
+    
 if __name__ == '__main__':
     import pygame
     from pygame.locals import *
@@ -258,23 +275,28 @@ if __name__ == '__main__':
                         donutstring = "on"
                     print "Turning donut mode %s" % (donutstring)
                 elif e.key == K_s:
-                    print "Saving array as %s.ply..." % filename
-                    writer = PlyWriter(filename + '.ply')
-                    writer.save(facecube.get_array(),donut)
-                    print "done"
+                    save_ply(facecube, filename, donut)
                 elif e.key == K_o:
-                    print "Saving temporary %s.ply..." % filename
-                    writer = PlyWriter(filename + '.ply')
-                    writer.save(facecube.get_array(),donut)
-                    print "Forming temporary solid %s.obj..." % filename
-                    subprocess.call(["meshlabserver","-i", filename+".ply","-o",filename+".obj","-s",sys.path[0]+"/meshing_poissonb.mlx"])
-                    print "Simplifying and saving %s.stl..." % filename
-                    subprocess.call(["meshlabserver","-i", filename+".obj","-o",filename+".stl","-s",sys.path[0]+"/meshing_simplifyb.mlx"])
-                    print "done"
+                    save_ply(facecube, filename, donut)
+                    save_stl(filename)
                 elif e.key == K_p:
                     screenshot = pygame.surfarray.make_surface(facecube.get_array())
                     pygame.image.save(screenshot,filename + '.png')
-                    
+                elif e.key == K_1:
+                    size = save_ply(facecube, filename, donut)
+                    save_stl(filename)
+                    subprocess.call(["openscad","-s", filename+"_token.stl","-D","file=\"" + filename+".stl\"","-D","xin="+str(size[0]),"-D","yin="+str(size[1]),"token.scad"])
+                    print "saved " + filename + "_token.stl"
+                elif e.key == K_2:
+                    size = save_ply(facecube, filename, donut)
+                    save_stl(filename)
+                    subprocess.call(["openscad","-s", filename+"_carbonite.stl","-D","file=\"" + filename+".stl\"","-D","xin="+str(size[0]),"-D","yin="+str(size[1]),"carbonite.scad"])
+                    print "saved " + filename + "_carbonite.stl"
+                elif e.key == K_3:
+                    size = save_ply(facecube, filename, donut)
+                    save_stl(filename)
+                    subprocess.call(["openscad","-s", filename+"_rescale.stl","-D","file=\"" + filename+".stl\"","-D","xin="+str(size[0]),"-D","yin="+str(size[1]),"rescale.scad"])
+                    print "saved " + filename + "_rescale.stl"
             elif e.type == KEYUP:
                 if changing_depth != 0.0:
                     changing_depth = 0.0
