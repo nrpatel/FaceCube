@@ -41,12 +41,27 @@ class PlyWriter(object):
         # depth to calculate x and y from, to keep a uniform perspective
         self.z_p = 0
         
+    def to_world(self, point):
+        x_out = float(point[0] - self.dims[0] / 2) * self.scale
+        y_out = float(point[1] - self.dims[1] / 2) * self.scale
+        return (x_out, y_out)
+        
     def save(self,array,leave_holes):
         points = []
         
         farthest = numpy.amax(array)
         farthest_mm = 1000.0/(-0.00307 * farthest + 3.33)
         self.z_p = farthest_mm
+        self.dims = array.shape
+        minDistance = -100
+        scaleFactor = 0.0021
+        self.scale = float(self.z_p + minDistance) * scaleFactor
+        
+        a = numpy.argwhere(array)
+        min_point, max_point = a.min(0), a.max(0) + 1
+        min_point = self.to_world(min_point)
+        max_point = self.to_world(max_point)
+        center_mm = ((min_point[0]+max_point[0])/2.0,(min_point[1]+max_point[1])/2)
 
         points.extend(self.outline_points(array,farthest,leave_holes))
         points.extend(self.back_points(array,farthest,leave_holes))
@@ -55,7 +70,7 @@ class PlyWriter(object):
         f = open(self.name,'w')
         
         self.write_header(f,points)
-        self.write_points(f,points,farthest_mm)
+        self.write_points(f,points,farthest_mm, center_mm)
         
         f.close()
         
@@ -66,17 +81,12 @@ class PlyWriter(object):
         # depth approximation from ROS, in mm
         array = (array != 0) * 1000.0/(-0.00307 * array + 3.33)
         
-        dims = array.shape
-        minDistance = -100
-        scaleFactor = 0.0021
-        
-        for i in range(0,dims[0]):
-            for j in range(0,dims[1]):
+        for i in range(0,self.dims[0]):
+            for j in range(0,self.dims[1]):
                 z = array[i,j]
                 if z:
                     # from http://openkinect.org/wiki/Imaging_Information
-                    x = float(i - dims[0] / 2) * float(self.z_p + minDistance) * scaleFactor
-                    y = float(j - dims[1] / 2) * float(self.z_p + minDistance) * scaleFactor
+                    (x, y) = self.to_world((i, j))
                     points.append((x,y,z))
                     
         return points
@@ -91,19 +101,14 @@ class PlyWriter(object):
             scipy.ndimage.morphology.binary_fill_holes(mask, output=mask)
         outline = array * (mask - scipy.ndimage.morphology.binary_erosion(mask))
         
-        dims = array.shape
-        minDistance = -100
-        scaleFactor = 0.0021
-        
-        for i in range(0,dims[0]):
-            for j in range(0,dims[1]):
+        for i in range(0,self.dims[0]):
+            for j in range(0,self.dims[1]):
                 z = outline[i,j]
                 if z:
                     z += 1
                     while z < depth:
                         z_mm = 1000.0/(-0.00307 * z + 3.33)
-                        x = float(i - dims[0] / 2) * float(self.z_p + minDistance) * scaleFactor
-                        y = float(j - dims[1] / 2) * float(self.z_p + minDistance) * scaleFactor
+                        (x, y) = self.to_world((i, j))
                         points.append((x,y,z_mm))
                         z += 1
         
@@ -128,10 +133,10 @@ class PlyWriter(object):
         f.write('property float z\n')
         f.write('end_header\n')
         
-    def write_points(self,f,points,farthest):
+    def write_points(self,f,points,farthest,center):
         """writes out the points with z starting at 0"""
         for point in points:
-            f.write('%f %f %f\n' % (point[0],point[1],farthest-point[2]))
+            f.write('%f %f %f\n' % (point[0]-center[0],point[1]-center[1],farthest-point[2]))
         
 
 class FaceCube(object):
